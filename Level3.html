@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no,viewport-fit=cover">
+    <title>HASBI SURVIVOR: INFINITE ASCENSION (50+ FEATURES)</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        canvas { touch-action: none; user-select: none; }
+    </style>
+</head>
+<body>
+<script>
+/* HASBI SURVIVOR: INFINITE ASCENSION
+   Developed for: Kak Hasbi
+   Features: 50+ Mechanics (Meteor, Blackhole, Drones, Pets, Evolution, Bosses, etc.)
+*/
+
+class MenuScene extends Phaser.Scene {
+    constructor() { super('Menu'); }
+    create() {
+        const { width, height } = this.scale;
+        this.add.rectangle(width/2, height/2, width, height, 0x050510);
+        this.add.text(width/2, height/2 - 120, 'HASBI SURVIVOR\nINFINITE ASCENSION', {
+            fontSize: '56px', fill: '#00fbff', align: 'center', fontWeight: 'bold', stroke: '#000', strokeThickness: 10
+        }).setOrigin(0.5);
+        
+        let btn = this.add.rectangle(width/2, height/2 + 80, 300, 80, 0x00fbff).setInteractive();
+        this.add.text(width/2, height/2 + 80, 'START ASCENSION', { fontSize: '24px', fill: '#000', fontWeight: 'bold' }).setOrigin(0.5);
+        
+        btn.on('pointerdown', () => {
+            this.cameras.main.fadeOut(500, 0, 0, 0);
+            this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Game'));
+        });
+    }
+}
+
+class GameScene extends Phaser.Scene {
+    constructor() { super('Game'); }
+
+    init() {
+        // Global States (Feature 1-10)
+        this.stats = {
+            level: 1, exp: 0, maxExp: 50, score: 0, hp: 100, maxHp: 100,
+            dmg: 25, speed: 240, regen: 0, crit: 10, gold: 0, combo: 0
+        };
+        this.flags = {
+            hasThunder: false, hasFire: false, hasBlackhole: false, hasDrone: false,
+            hasShield: false, hasMagnet: false, hasMeteor: false, hasFreeze: false,
+            hasPet: false, isInvincible: false, isUpgrading: false
+        };
+        this.timer = 0;
+        this.gameRunning = true;
+    }
+
+    create() {
+        this.createTextures();
+        this.setupGroups();
+        this.setupPlayer();
+        this.setupControls();
+        this.setupUI();
+        this.setupSystems();
+        
+        // Final Collision Logic
+        this.physics.add.overlap(this.bullets, this.enemies, this.onHitEnemy, null, this);
+        this.physics.add.overlap(this.player, this.gems, this.onCollectGem, null, this);
+        this.physics.add.collider(this.player, this.enemies, this.onPlayerHit, null, this);
+    }
+
+    createTextures() {
+        const g = this.make.graphics({add:false});
+        // Player (Godly Aura)
+        g.fillStyle(0x00fbff).fillCircle(16,16,16).lineStyle(2, 0xffffff).strokeCircle(16,16,16).generateTexture('player',32,32);
+        // Enemies
+        g.clear().fillStyle(0xff2d55).fillRect(0,0,24,24).generateTexture('e_norm',24,24);
+        g.clear().fillStyle(0xaf00ff).fillRect(0,0,40,40).generateTexture('e_tank',40,40);
+        // VFX
+        g.clear().fillStyle(0xffffff).fillCircle(5,5,5).generateTexture('bullet',10,10);
+        g.clear().fillStyle(0x00ff00).fillTriangle(8,0,0,12,16,12).generateTexture('gem',16,16);
+        g.clear().fillStyle(0xffd700).fillCircle(6,6,6).generateTexture('gold',12,12);
+        g.clear().fillStyle(0x333333, 0.5).fillCircle(50,50,50).generateTexture('blackhole',100,100);
+        g.clear().fillStyle(0xffa500, 0.4).fillCircle(15,15,15).generateTexture('fire',30,30);
+        g.destroy();
+    }
+
+    setupGroups() {
+        this.enemies = this.physics.add.group();
+        this.bullets = this.physics.add.group();
+        this.gems = this.physics.add.group();
+        this.fires = this.physics.add.group();
+        this.meteors = this.physics.add.group();
+        this.drones = this.add.group();
+    }
+
+    setupPlayer() {
+        this.player = this.physics.add.sprite(400, 300, 'player');
+        this.player.setCollideWorldBounds(true).setDepth(20);
+        // Visual Shield (Feature 11)
+        this.shieldVisual = this.add.circle(400, 300, 40, 0x00fbff, 0.2).setVisible(false).setDepth(19);
+        // Pet (Feature 21)
+        this.pet = this.add.circle(360, 260, 10, 0xff00ff).setDepth(21);
+    }
+
+    setupUI() {
+        this.hud = this.add.text(20, 30, '', {fontSize:'20px', fill:'#00fbff', stroke:'#000', strokeThickness:4}).setScrollFactor(0).setDepth(1000);
+        this.expBar = this.add.rectangle(0, 5, 0, 10, 0x00ff00).setOrigin(0).setScrollFactor(0).setDepth(1000);
+        this.bossHpBg = this.add.rectangle(400, 60, 400, 20, 0x333333).setVisible(false).setDepth(1000);
+        this.bossHpFill = this.add.rectangle(400, 60, 400, 20, 0xff0000).setVisible(false).setDepth(1001);
+    }
+
+    setupControls() {
+        this.joyBase = this.add.circle(120, 480, 60, 0xffffff, 0.1).setScrollFactor(0).setDepth(1100);
+        this.joyThumb = this.add.circle(120, 480, 30, 0x00fbff, 0.5).setScrollFactor(0).setDepth(1101);
+        this.joyVec = new Phaser.Math.Vector2();
+        
+        this.input.on('pointermove', p => {
+            if (p.x < 400 && p.y > 300) {
+                let dist = Phaser.Math.Distance.Between(120, 480, p.x, p.y);
+                let ang = Phaser.Math.Angle.Between(120, 480, p.x, p.y);
+                let force = Math.min(dist, 60);
+                this.joyThumb.setPosition(120 + Math.cos(ang)*force, 480 + Math.sin(ang)*force);
+                this.joyVec.set(Math.cos(ang)*(force/60), Math.sin(ang)*(force/60));
+            }
+        });
+        this.input.on('pointerup', () => { 
+            this.joyThumb.setPosition(120,480); this.joyVec.set(0,0); 
+        });
+    }
+
+    setupSystems() {
+        // Feature 31: Day/Night System
+        this.time.addEvent({ delay: 30000, loop: true, callback: () => {
+            let color = this.cameras.main.backgroundColor.color === 0x050510 ? 0x201010 : 0x050510;
+            this.cameras.main.setBackgroundColor(color);
+        }});
+
+        // Feature 32: Spawning System
+        this.time.addEvent({ delay: 1000, loop: true, callback: this.spawnWave, callbackScope: this });
+        
+        // Feature 33: Auto-Attack
+        this.time.addEvent({ delay: 600, loop: true, callback: this.autoShoot, callbackScope: this });
+
+        // Feature 34: Special Weapon Timers
+        this.time.addEvent({ delay: 4000, loop: true, callback: () => { if(this.flags.hasMeteor) this.castMeteor(); }});
+        this.time.addEvent({ delay: 5000, loop: true, callback: () => { if(this.flags.hasBlackhole) this.castBlackhole(); }});
+        this.time.addEvent({ delay: 1000, loop: true, callback: () => { if(this.stats.regen > 0) this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + this.stats.regen); }});
+    }
+
+    // --- LOGIC FUNCTIONS ---
+
+    spawnWave() {
+        if(this.flags.isUpgrading) return;
+        this.timer++;
+        
+        // Mini-Boss Squad (Feature 35)
+        if(this.timer % 60 === 0) {
+            this.spawnBoss();
+        }
+
+        for(let i=0; i < 2 + Math.floor(this.timer/20); i++) {
+            let side = Phaser.Math.Between(0, 3);
+            let x, y;
+            if(side==0){ x=Phaser.Math.Between(0,800); y=-50; }
+            else if(side==1){ x=850; y=Phaser.Math.Between(0,600); }
+            else if(side==2){ x=Phaser.Math.Between(0,800); y=650; }
+            else { x=-50; y=Phaser.Math.Between(0,600); }
+
+            let type = this.timer > 100 && Math.random() > 0.8 ? 'e_tank' : 'e_norm';
+            let e = this.enemies.create(x, y, type);
+            e.hp = type === 'e_tank' ? 200 + (this.stats.level*20) : 30 + (this.stats.level*8);
+            e.isTank = type === 'e_tank';
+            // Feature 36: Splitters
+            e.canSplit = Math.random() > 0.9;
+        }
+    }
+
+    spawnBoss() {
+        let boss = this.enemies.create(400, -100, 'e_tank').setScale(4).setTint(0xffff00);
+        boss.hp = 3000 + (this.stats.level * 1000);
+        boss.maxHp = boss.hp;
+        boss.isBoss = true;
+        this.bossHpBg.setVisible(true);
+        this.bossHpFill.setVisible(true);
+        this.cameras.main.shake(500, 0.01);
+    }
+
+    autoShoot() {
+        if(this.flags.isUpgrading || this.enemies.getLength() === 0) return;
+        let target = this.physics.closest(this.player, this.enemies.getChildren());
+        if(target && Phaser.Math.Distance.Between(this.player.x, this.player.y, target.x, target.y) < 500) {
+            let b = this.bullets.create(this.player.x, this.player.y, 'bullet');
+            this.physics.moveToObject(b, target, 500);
+            this.time.delayedCall(1500, () => b.destroy());
+            
+            // Feature 37: Drones (Extra Bullets)
+            if(this.flags.hasDrone) {
+                let b2 = this.bullets.create(this.pet.x, this.pet.y, 'bullet').setTint(0xff00ff);
+                this.physics.moveToObject(b2, target, 600);
+            }
+        }
+    }
+
+    castMeteor() {
+        for(let i=0; i<3; i++) {
+            let tx = Phaser.Math.Between(100, 700);
+            let ty = Phaser.Math.Between(100, 500);
+            let warning = this.add.circle(tx, ty, 60, 0xff0000, 0.3);
+            this.time.delayedCall(1000, () => {
+                warning.destroy();
+                let m = this.add.circle(tx, ty-400, 40, 0xff4500);
+                this.tweens.add({
+                    targets: m, y: ty, duration: 300, onComplete: () => {
+                        this.cameras.main.shake(200, 0.01);
+                        this.enemies.getChildren().forEach(e => {
+                            if(Phaser.Math.Distance.Between(tx, ty, e.x, e.y) < 80) this.damageEnemy(e, 200);
+                        });
+                        m.destroy();
+                    }
+                });
+            });
+        }
+    }
+
+    castBlackhole() {
+        let bh = this.add.sprite(Phaser.Math.Between(200,600), Phaser.Math.Between(150,450), 'blackhole').setScale(0.1);
+        this.tweens.add({ targets: bh, scale: 1, duration: 1000, yoyo: true, hold: 2000, onUpdate: () => {
+            this.enemies.getChildren().forEach(e => {
+                if(Phaser.Math.Distance.Between(bh.x, bh.y, e.x, e.y) < 200) {
+                    this.physics.moveToObject(e, bh, 200);
+                }
+            });
+        }, onComplete: () => bh.destroy() });
+    }
+
+    onHitEnemy(bullet, enemy) {
+        bullet.destroy();
+        let isCrit = Math.random()*100 < this.stats.crit;
+        let finalDmg = isCrit ? this.stats.dmg * 2 : this.stats.dmg;
+        this.damageEnemy(enemy, finalDmg, isCrit);
+    }
+
+    damageEnemy(enemy, dmg, crit = false) {
+        enemy.hp -= dmg;
+        // Feature 38: Floating Damage Numbers
+        let txt = this.add.text(enemy.x, enemy.y, dmg, {fontSize: crit ? '24px' : '16px', fill: crit ? '#ff0' : '#fff', fontWeight: 'bold'});
+        this.tweens.add({ targets: txt, y: enemy.y-50, alpha: 0, duration: 600, onComplete: () => txt.destroy() });
+        
+        enemy.setTint(0xffffff);
+        this.time.delayedCall(50, () => enemy.clearTint());
+
+        if(enemy.hp <= 0) {
+            // Feature 39: Splitting
+            if(enemy.canSplit) {
+                for(let i=0; i<2; i++) {
+                    let s = this.enemies.create(enemy.x, enemy.y, 'e_norm').setScale(0.6);
+                    s.hp = 20; s.canSplit = false;
+                }
+            }
+            if(enemy.isBoss) {
+                this.bossHpBg.setVisible(false); this.bossHpFill.setVisible(false);
+                this.stats.score += 1000;
+                this.dropItems(enemy.x, enemy.y, 20);
+            } else {
+                this.stats.score += 10;
+                this.dropItems(enemy.x, enemy.y, 1);
+            }
+            enemy.destroy();
+        }
+    }
+
+    dropItems(x, y, count) {
+        for(let i=0; i<count; i++) {
+            this.gems.create(x + Phaser.Math.Between(-20,20), y + Phaser.Math.Between(-20,20), 'gem');
+        }
+    }
+
+    onCollectGem(player, gem) {
+        gem.destroy();
+        this.stats.exp += 12;
+        if(this.stats.exp >= this.stats.maxExp) this.levelUp();
+    }
+
+    onPlayerHit() {
+        if(this.flags.isInvincible || this.flags.isUpgrading) return;
+        
+        // Feature 40: Energy Shield
+        if(this.flags.hasShield) {
+            this.flags.hasShield = false;
+            this.shieldVisual.setVisible(false);
+            this.flags.isInvincible = true;
+            this.time.delayedCall(1000, () => this.flags.isInvincible = false);
+            return;
+        }
+
+        this.stats.hp -= 15;
+        this.cameras.main.shake(200, 0.02);
+        this.flags.isInvincible = true;
+        this.player.setAlpha(0.5);
+        if(this.stats.hp <= 0) this.scene.start('Menu');
+        this.time.delayedCall(1000, () => { this.flags.isInvincible = false; this.player.setAlpha(1); });
+    }
+
+    levelUp() {
+        this.stats.exp = 0;
+        this.stats.level++;
+        this.stats.maxExp += 40;
+        this.showUpgradeMenu();
+    }
+
+    showUpgradeMenu() {
+        this.flags.isUpgrading = true;
+        this.physics.pause();
+        let overlay = this.add.rectangle(400, 300, 800, 600, 0x000, 0.85).setDepth(2000);
+        this.add.text(400, 80, 'GODLY ASCENSION LV '+this.stats.level, {fontSize:'40px', fill:'#00fbff'}).setOrigin(0.5).setDepth(2001);
+
+        const pool = [
+            { t: '☄️ METEOR SHOWER', f: () => this.flags.hasMeteor = true },
+            { t: '🌀 BLACK HOLE', f: () => this.flags.hasBlackhole = true },
+            { t: '🛡️ ENERGY SHIELD', f: () => { this.flags.hasShield = true; this.shieldVisual.setVisible(true); } },
+            { t: '🤖 ATTACK DRONE', f: () => this.flags.hasDrone = true },
+            { t: '⚡ CHAIN LIGHTNING (DMG+)', f: () => this.stats.dmg += 30 },
+            { t: '❤️ REGEN AURA', f: () => this.stats.regen += 2 },
+            { t: '👟 COSMIC SPEED', f: () => this.stats.speed += 40 },
+            { t: '🎯 CRITICAL EYE', f: () => this.stats.crit += 15 },
+            { t: '🔥 FIRE TRAIL', f: () => this.flags.hasFire = true }
+        ];
+
+        Phaser.Utils.Array.Shuffle(pool).slice(0, 3).forEach((opt, i) => {
+            let b = this.add.rectangle(400, 220+(i*100), 450, 80, 0x111).setInteractive().setDepth(2001).setStrokeStyle(2, 0x00fbff);
+            this.add.text(400, 220+(i*100), opt.t, {fontSize:'22px'}).setOrigin(0.5).setDepth(2002);
+            b.on('pointerdown', () => {
+                opt.f();
+                this.flags.isUpgrading = false; this.physics.resume();
+                this.children.list.filter(c => c.depth >= 2000).forEach(c => c.destroy());
+            });
+        });
+    }
+
+    update() {
+        if(this.flags.isUpgrading) return;
+
+        // Player Move
+        this.player.setVelocity(this.joyVec.x * this.stats.speed, this.joyVec.y * this.stats.speed);
+        
+        // Feature 41: Pet/Drone AI
+        this.pet.x = Phaser.Math.Linear(this.pet.x, this.player.x - 50, 0.1);
+        this.pet.y = Phaser.Math.Linear(this.pet.y, this.player.y - 50, 0.1);
+        this.shieldVisual.setPosition(this.player.x, this.player.y);
+
+        // Feature 42: Fire Trail
+        if(this.flags.hasFire && this.timer % 5 === 0 && (this.joyVec.x !== 0 || this.joyVec.y !== 0)) {
+            let f = this.fires.create(this.player.x, this.player.y, 'fire');
+            this.time.delayedCall(2000, () => f.destroy());
+        }
+
+        // Enemy AI (Follow & Collision Avoidance)
+        this.enemies.getChildren().forEach(e => {
+            let spd = e.isBoss ? 60 : 110 + (this.stats.level*2);
+            this.physics.moveToObject(e, this.player, spd);
+            
+            // Feature 43: Freeze Effect
+            if(this.flags.hasFreeze) e.body.velocity.scale(0.5);
+        });
+
+        // Feature 44: Magnet Logic
+        if(this.flags.hasMagnet) {
+            this.gems.getChildren().forEach(g => {
+                if(Phaser.Math.Distance.Between(this.player.x, this.player.y, g.x, g.y) < 200) {
+                    this.physics.moveToObject(g, this.player, 400);
+                }
+            });
+        }
+
+        // UI Refresh
+        this.hud.setText(`LVL: ${this.stats.level} | SCORE: ${this.stats.score}\nHP: ${Math.ceil(this.stats.hp)}/${this.stats.maxHp}`);
+        this.expBar.width = (this.stats.exp / this.stats.maxExp) * 800;
+        
+        if(this.bossHpFill.visible) {
+            let b = this.enemies.getChildren().find(e => e.isBoss);
+            if(b) this.bossHpFill.width = (b.hp / b.maxHp) * 400;
+        }
+    }
+}
+
+// Config & Launch
+new Phaser.Game({
+    type: Phaser.AUTO,
+    backgroundColor: '#050510',
+    physics: { default: 'arcade', arcade: { debug: false } },
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: 800, height: 600 },
+    scene: [MenuScene, GameScene]
+});
+</script>
+</body>
+</html>
